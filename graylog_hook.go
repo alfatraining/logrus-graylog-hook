@@ -11,13 +11,23 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/SocialCodeInc/go-gelf/gelf"
+	"github.com/alfatraining/go-gelf/gelf"
 )
 
 // Set graylog.BufSize = <value> _before_ calling NewGraylogHook
 // Once the buffer is full, logging will start blocking, waiting for slots to
 // be available in the queue.
 var BufSize uint = 8192
+
+// 0	Emergency: system is unusable
+// 1	Alert: action must be taken immediately
+// 2	Critical: critical conditions
+// 3	Error: error conditions
+// 4	Warning: warning conditions
+// 5	Notice: normal but significant condition
+// 6	Informational: informational messages
+// 7	Debug: debug-level messages
+var levelMap = map[logrus.Level]int32{logrus.PanicLevel: 0, logrus.FatalLevel: 2, logrus.ErrorLevel: 3, logrus.InfoLevel: 6, logrus.WarnLevel: 4, logrus.DebugLevel: 7}
 
 // GraylogHook to send logs to a logging service compatible with the Graylog API and the GELF format.
 type GraylogHook struct {
@@ -42,6 +52,7 @@ func NewGraylogHook(addr string, facility string, extra map[string]interface{}) 
 	g, err := gelf.NewWriter(addr)
 	if err != nil {
 		logrus.WithField("err", err).Info("Can't create Gelf logger")
+		return nil
 	}
 	hook := &GraylogHook{
 		Facility:    facility,
@@ -59,6 +70,7 @@ func NewAsyncGraylogHook(addr string, facility string, extra map[string]interfac
 	g, err := gelf.NewWriter(addr)
 	if err != nil {
 		logrus.WithField("err", err).Info("Can't create Gelf logger")
+		return nil
 	}
 	hook := &GraylogHook{
 		Facility:   facility,
@@ -108,6 +120,22 @@ func (hook *GraylogHook) Flush() {
 	hook.wg.Wait()
 }
 
+// [ks] - format based on type
+func formatForJSON(value interface{}) interface{} {
+	switch value.(type) {
+	case int:
+		return value
+	case float64:
+		return value
+	case bool:
+		return value
+	case string:
+		return value
+	default:
+		return fmt.Sprintf("%s", value)
+	}
+}
+
 // fire will loop on the 'buf' channel, and write entries to graylog
 func (hook *GraylogHook) fire() {
 	for {
@@ -140,14 +168,18 @@ func (hook *GraylogHook) sendEntry(entry graylogEntry) {
 		full = p
 	}
 
-	level := int32(entry.Level) + 2 // logrus levels are lower than syslog by 2
+	// map logrus to syslog levels
+	level, ok := levelMap[entry.Level]
+	if ok == false {
+		level = levelMap[logrus.InfoLevel]
+	}
 
 	// Don't modify entry.Data directly, as the entry will used after this hook was fired
 	extra := map[string]interface{}{}
 	// Merge extra fields
 	for k, v := range hook.Extra {
 		k = fmt.Sprintf("_%s", k) // "[...] every field you send and prefix with a _ (underscore) will be treated as an additional field."
-		extra[k] = v
+		extra[k] = formatForJSON(v)
 	}
 	for k, v := range entry.Data {
 		extraK := fmt.Sprintf("_%s", k) // "[...] every field you send and prefix with a _ (underscore) will be treated as an additional field."
@@ -157,10 +189,10 @@ func (hook *GraylogHook) sendEntry(entry graylogEntry) {
 			if isError && !isMarshaler {
 				extra[extraK] = newMarshalableError(asError)
 			} else {
-				extra[extraK] = v
+				extra[extraK] = formatForJSON(v)
 			}
 		} else {
-			extra[extraK] = v
+			extra[extraK] = formatForJSON(v)
 		}
 	}
 
@@ -169,7 +201,7 @@ func (hook *GraylogHook) sendEntry(entry graylogEntry) {
 		Host:     host,
 		Short:    string(short),
 		Full:     string(full),
-		TimeUnix: time.Now().Unix(),
+		TimeUnixMs: time.Now().UnixNano() / 1000000,
 		Level:    level,
 		Facility: hook.Facility,
 		File:     entry.file,
