@@ -14,6 +14,7 @@ import (
 
 const SyslogInfoLevel = 6
 const SyslogErrorLevel = 7
+const ExpectedExtraFields = 3
 
 func TestWritingToUDP(t *testing.T) {
 	r, err := gelf.NewReader("127.0.0.1:0")
@@ -49,7 +50,7 @@ func TestWritingToUDP(t *testing.T) {
 		t.Errorf("msg.Facility: expected %#v, got %#v)", "test_facility", msg.Facility)
 	}
 
-	if len(msg.Extra) != 2 {
+	if len(msg.Extra) != ExpectedExtraFields {
 		t.Errorf("wrong number of extra fields (exp: %d, got %d) in %v", 2, len(msg.Extra), msg.Extra)
 	}
 
@@ -59,11 +60,11 @@ func TestWritingToUDP(t *testing.T) {
 			msg.File)
 	}
 
-	if msg.Line != 28 { // Update this if code is updated above
+	if msg.Line != 29 { // Update this if code is updated above
 		t.Errorf("msg.Line: expected %d, got %d", 28, msg.Line)
 	}
 
-	if len(msg.Extra) != 2 {
+	if len(msg.Extra) != ExpectedExtraFields {
 		t.Errorf("wrong number of extra fields (exp: %d, got %d) in %v", 2, len(msg.Extra), msg.Extra)
 	}
 

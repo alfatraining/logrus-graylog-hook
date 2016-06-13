@@ -176,6 +176,7 @@ func (hook *GraylogHook) sendEntry(entry graylogEntry) {
 
 	// Don't modify entry.Data directly, as the entry will used after this hook was fired
 	extra := map[string]interface{}{}
+
 	// Merge extra fields
 	for k, v := range hook.Extra {
 		k = fmt.Sprintf("_%s", k) // "[...] every field you send and prefix with a _ (underscore) will be treated as an additional field."
@@ -195,6 +196,9 @@ func (hook *GraylogHook) sendEntry(entry graylogEntry) {
 			extra[extraK] = formatForJSON(v)
 		}
 	}
+
+	// add the logrus Level as a field in order to have the name of the level as well... I can't watch levels as numbers anymore
+	extra["_severity"] = fmt.Sprintf("%s", entry.Level)
 
 	m := gelf.Message{
 		Version:  "1.1",
