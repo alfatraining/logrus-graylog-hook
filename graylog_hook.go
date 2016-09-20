@@ -98,7 +98,13 @@ func (hook *GraylogHook) Fire(entry *logrus.Entry) error {
 		newData[k] = v
 	}
 
-	newEntry := &logrus.Entry{entry.Logger, newData, entry.Time, entry.Level, entry.Message}
+	newEntry := &logrus.Entry{
+		Logger:  entry.Logger,
+		Data:    newData,
+		Time:    entry.Time,
+		Level:   entry.Level,
+		Message: entry.Message,
+	}
 	gEntry := graylogEntry{newEntry, file, line}
 
 	if hook.synchronous {
@@ -201,16 +207,16 @@ func (hook *GraylogHook) sendEntry(entry graylogEntry) {
 	extra["_severity"] = fmt.Sprintf("%s", entry.Level)
 
 	m := gelf.Message{
-		Version:  "1.1",
-		Host:     host,
-		Short:    string(short),
-		Full:     string(full),
+		Version:    "1.1",
+		Host:       host,
+		Short:      string(short),
+		Full:       string(full),
 		TimeUnixMs: time.Now().UnixNano() / 1000000,
-		Level:    level,
-		Facility: hook.Facility,
-		File:     entry.file,
-		Line:     entry.line,
-		Extra:    extra,
+		Level:      level,
+		Facility:   hook.Facility,
+		File:       entry.file,
+		Line:       entry.line,
+		Extra:      extra,
 	}
 
 	if err := w.WriteMessage(&m); err != nil {
