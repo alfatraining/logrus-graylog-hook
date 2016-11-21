@@ -49,10 +49,6 @@ func TestWritingToUDP(t *testing.T) {
 		t.Errorf("msg.Level: expected: %d, got %d)", SyslogInfoLevel, msg.Level)
 	}
 
-	if len(msg.Extra) != 3 {
-		t.Errorf("wrong number of extra fields (exp: %d, got %d) in %v", 2, len(msg.Extra), msg.Extra)
-	}
-
 	fileExpected := "graylog_hook_test.go"
 	if !strings.HasSuffix(msg.File, fileExpected) {
 		t.Errorf("msg.File: expected %s, got %s", fileExpected,
@@ -64,7 +60,7 @@ func TestWritingToUDP(t *testing.T) {
 	}
 
 	if len(msg.Extra) != ExpectedExtraFields {
-		t.Errorf("wrong number of extra fields (exp: %d, got %d) in %v", 2, len(msg.Extra), msg.Extra)
+		t.Errorf("wrong number of extra fields (exp: %d, got %d) in %v", ExpectedExtraFields, len(msg.Extra), msg.Extra)
 	}
 
 	extra := map[string]interface{}{"foo": "bar", "withField": "1"}
@@ -77,6 +73,7 @@ func TestWritingToUDP(t *testing.T) {
 	}
 
 }
+
 func testErrorLevelReporting(t *testing.T) {
 	r, err := NewReader("127.0.0.1:0")
 	if err != nil {

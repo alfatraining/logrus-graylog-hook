@@ -195,7 +195,7 @@ func (hook *GraylogHook) sendEntry(entry graylogEntry) {
 				if isError && !isMarshaler {
 					extra[extraK] = newMarshalableError(asError)
 				} else {
-					extra[extraK] = v
+					extra[extraK] = formatForJSON(v)
 				}
 			} else {
 				extra[extraK] = formatForJSON(v)
