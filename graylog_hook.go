@@ -1,8 +1,9 @@
-package graylog // import "gopkg.in/gemnasium/logrus-graylog-hook.v1"
+package graylog
 
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/alfatraining/go-gelf/gelf"
 )
 
 // Set graylog.BufSize = <value> _before_ calling NewGraylogHook
@@ -31,13 +31,13 @@ var levelMap = map[logrus.Level]int32{logrus.PanicLevel: 0, logrus.FatalLevel: 2
 
 // GraylogHook to send logs to a logging service compatible with the Graylog API and the GELF format.
 type GraylogHook struct {
-	Facility    string
 	Extra       map[string]interface{}
-	gelfLogger  *gelf.Writer
+	gelfLogger  *Writer
 	buf         chan graylogEntry
 	wg          sync.WaitGroup
 	mu          sync.RWMutex
 	synchronous bool
+	blacklist   map[string]bool
 }
 
 // Graylog needs file and line params
@@ -48,14 +48,13 @@ type graylogEntry struct {
 }
 
 // NewGraylogHook creates a hook to be added to an instance of logger.
-func NewGraylogHook(addr string, facility string, extra map[string]interface{}) *GraylogHook {
-	g, err := gelf.NewWriter(addr)
+func NewGraylogHook(addr string, extra map[string]interface{}) *GraylogHook {
+	g, err := NewWriter(addr)
 	if err != nil {
 		logrus.WithField("err", err).Info("Can't create Gelf logger")
 		return nil
 	}
 	hook := &GraylogHook{
-		Facility:    facility,
 		Extra:       extra,
 		gelfLogger:  g,
 		synchronous: true,
@@ -66,14 +65,13 @@ func NewGraylogHook(addr string, facility string, extra map[string]interface{}) 
 // NewAsyncGraylogHook creates a hook to be added to an instance of logger.
 // The hook created will be asynchronous, and it's the responsibility of the user to call the Flush method
 // before exiting to empty the log queue.
-func NewAsyncGraylogHook(addr string, facility string, extra map[string]interface{}) *GraylogHook {
-	g, err := gelf.NewWriter(addr)
+func NewAsyncGraylogHook(addr string, extra map[string]interface{}) *GraylogHook {
+	g, err := NewWriter(addr)
 	if err != nil {
 		logrus.WithField("err", err).Info("Can't create Gelf logger")
 		return nil
 	}
 	hook := &GraylogHook{
-		Facility:   facility,
 		Extra:      extra,
 		gelfLogger: g,
 		buf:        make(chan graylogEntry, BufSize),
@@ -189,34 +187,35 @@ func (hook *GraylogHook) sendEntry(entry graylogEntry) {
 		extra[k] = formatForJSON(v)
 	}
 	for k, v := range entry.Data {
-		extraK := fmt.Sprintf("_%s", k) // "[...] every field you send and prefix with a _ (underscore) will be treated as an additional field."
-		if k == logrus.ErrorKey {
-			asError, isError := v.(error)
-			_, isMarshaler := v.(json.Marshaler)
-			if isError && !isMarshaler {
-				extra[extraK] = newMarshalableError(asError)
+		if !hook.blacklist[k] {
+			extraK := fmt.Sprintf("_%s", k) // "[...] every field you send and prefix with a _ (underscore) will be treated as an additional field."
+			if k == logrus.ErrorKey {
+				asError, isError := v.(error)
+				_, isMarshaler := v.(json.Marshaler)
+				if isError && !isMarshaler {
+					extra[extraK] = newMarshalableError(asError)
+				} else {
+					extra[extraK] = v
+				}
 			} else {
 				extra[extraK] = formatForJSON(v)
 			}
-		} else {
-			extra[extraK] = formatForJSON(v)
 		}
 	}
 
 	// add the logrus Level as a field in order to have the name of the level as well... I can't watch levels as numbers anymore
 	extra["_severity"] = fmt.Sprintf("%s", entry.Level)
 
-	m := gelf.Message{
-		Version:    "1.1",
-		Host:       host,
-		Short:      string(short),
-		Full:       string(full),
-		TimeUnixMs: time.Now().UnixNano() / 1000000,
-		Level:      level,
-		Facility:   hook.Facility,
-		File:       entry.file,
-		Line:       entry.line,
-		Extra:      extra,
+	m := Message{
+		Version:  "1.1",
+		Host:     host,
+		Short:    string(short),
+		Full:     string(full),
+		TimeUnix: float64(time.Now().UnixNano()/1000000) / 1000.,
+		Level:    level,
+		File:     entry.file,
+		Line:     entry.line,
+		Extra:    extra,
 	}
 
 	if err := w.WriteMessage(&m); err != nil {
@@ -235,6 +234,30 @@ func (hook *GraylogHook) Levels() []logrus.Level {
 		logrus.InfoLevel,
 		logrus.DebugLevel,
 	}
+}
+
+// Blacklist create a blacklist map to filter some message keys.
+// This useful when you want your application to log extra fields locally
+// but don't want graylog to store them.
+func (hook *GraylogHook) Blacklist(b []string) {
+	hook.blacklist = make(map[string]bool)
+	for _, elem := range b {
+		hook.blacklist[elem] = true
+	}
+}
+
+// SetWriter sets the hook Gelf Writer
+func (hook *GraylogHook) SetWriter(w *Writer) error {
+	if w == nil {
+		return errors.New("writer can't be nil")
+	}
+	hook.gelfLogger = w
+	return nil
+}
+
+// Writer returns the logger Gelf Writer
+func (hook *GraylogHook) Writer() *Writer {
+	return hook.gelfLogger
 }
 
 // getCaller returns the filename and the line info of a function

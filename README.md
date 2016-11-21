@@ -1,4 +1,4 @@
-# Graylog Hook for [Logrus](https://github.com/Sirupsen/logrus) <img src="http://i.imgur.com/hTeVwmJ.png" width="40" height="40" alt=":walrus:" class="emoji" title=":walrus:" />&nbsp;[![Build Status](https://travis-ci.org/gemnasium/logrus-graylog-hook.svg?branch=master)](https://travis-ci.org/gemnasium/logrus-graylog-hook)&nbsp;[![godoc reference](https://godoc.org/github.com/gemnasium/logrus-graylog-hook?status.svg)](https://godoc.org/gopkg.in/gemnasium/logrus-graylog-hook.v1)
+# Graylog Hook for [Logrus](https://github.com/Sirupsen/logrus) <img src="http://i.imgur.com/hTeVwmJ.png" width="40" height="40" alt=":walrus:" class="emoji" title=":walrus:" />&nbsp;[![Build Status](https://travis-ci.org/gemnasium/logrus-graylog-hook.svg?branch=master)](https://travis-ci.org/gemnasium/logrus-graylog-hook)&nbsp;[![godoc reference](https://godoc.org/github.com/gemnasium/logrus-graylog-hook?status.svg)](https://godoc.org/gopkg.in/gemnasium/logrus-graylog-hook.v2)
 
 Use this hook to send your logs to [Graylog](http://graylog2.org) server over UDP.
 The hook is non-blocking: even if UDP is used to send messages, the extra work
@@ -11,19 +11,19 @@ All logrus fields will be sent as additional fields on Graylog.
 The hook must be configured with:
 
 * A Graylog GELF UDP address (a "ip:port" string).
-* A facility
 * an optional hash with extra global fields. These fields will be included in all messages sent to Graylog
 
 ```go
+package main
+
 import (
     "log/syslog"
-    "github.com/Sirupsen/logrus"
-    "gopkg.in/gemnasium/logrus-graylog-hook.v1"
+    log "github.com/Sirupsen/logrus"
+    "gopkg.in/gemnasium/logrus-graylog-hook.v2"
     )
 
 func main() {
-    log := logrus.New()
-    hook := graylog.NewGraylogHook("<graylog_ip>:<graylog_port>", "some_facility", map[string]interface{}{"this": "is logged every time"})
+    hook := graylog.NewGraylogHook("<graylog_ip>:<graylog_port>", map[string]interface{}{"this": "is logged every time"})
     log.Hooks.Add(hook)
     log.Info("some logging message")
 }
@@ -32,15 +32,16 @@ func main() {
 ### Asynchronous logger
 
 ```go
+package main
+
 import (
     "log/syslog"
-    "github.com/Sirupsen/logrus"
-    "gopkg.in/gemnasium/logrus-graylog-hook.v1"
+    log "github.com/Sirupsen/logrus"
+    "gopkg.in/gemnasium/logrus-graylog-hook.v2"
     )
 
 func main() {
-    log := logrus.New()
-    hook := graylog.NewAsyncGraylogHook("<graylog_ip>:<graylog_port>", "some_facility", map[string]interface{}{"this": "is logged every time"})
+    hook := graylog.NewAsyncGraylogHook("<graylog_ip>:<graylog_port>", map[string]interface{}{"this": "is logged every time"})
     defer hook.Flush()
     log.Hooks.Add(hook)
     log.Info("some logging message")

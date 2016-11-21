@@ -1,15 +1,16 @@
 package graylog
 
 import (
+	"compress/flate"
 	"encoding/json"
 	"errors"
+	"io/ioutil"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/SocialCodeInc/go-gelf/gelf"
 )
 
 const SyslogInfoLevel = 6
@@ -17,16 +18,18 @@ const SyslogErrorLevel = 7
 const ExpectedExtraFields = 3
 
 func TestWritingToUDP(t *testing.T) {
-	r, err := gelf.NewReader("127.0.0.1:0")
+	r, err := NewReader("127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("NewReader: %s", err)
 	}
-	hook := NewGraylogHook(r.Addr(), "test_facility", map[string]interface{}{"foo": "bar"})
+	hook := NewGraylogHook(r.Addr(), map[string]interface{}{"foo": "bar"})
+	hook.Blacklist([]string{"filterMe"})
 	msgData := "test message\nsecond line"
 
 	log := logrus.New()
+	log.Out = ioutil.Discard
 	log.Hooks.Add(hook)
-	log.WithField("withField", "1").Info(msgData)
+	log.WithFields(logrus.Fields{"withField": "1", "filterMe": "1"}).Info(msgData)
 
 	msg, err := r.ReadMessage()
 
@@ -46,11 +49,7 @@ func TestWritingToUDP(t *testing.T) {
 		t.Errorf("msg.Level: expected: %d, got %d)", SyslogInfoLevel, msg.Level)
 	}
 
-	if msg.Facility != "test_facility" {
-		t.Errorf("msg.Facility: expected %#v, got %#v)", "test_facility", msg.Facility)
-	}
-
-	if len(msg.Extra) != ExpectedExtraFields {
+	if len(msg.Extra) != 3 {
 		t.Errorf("wrong number of extra fields (exp: %d, got %d) in %v", 2, len(msg.Extra), msg.Extra)
 	}
 
@@ -60,8 +59,8 @@ func TestWritingToUDP(t *testing.T) {
 			msg.File)
 	}
 
-	if msg.Line != 29 { // Update this if code is updated above
-		t.Errorf("msg.Line: expected %d, got %d", 28, msg.Line)
+	if msg.Line != 32 { // Update this if code is updated above
+		t.Errorf("msg.Line: expected %d, got %d", 32, msg.Line)
 	}
 
 	if len(msg.Extra) != ExpectedExtraFields {
@@ -79,14 +78,15 @@ func TestWritingToUDP(t *testing.T) {
 
 }
 func testErrorLevelReporting(t *testing.T) {
-	r, err := gelf.NewReader("127.0.0.1:0")
+	r, err := NewReader("127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("NewReader: %s", err)
 	}
-	hook := NewGraylogHook(r.Addr(), "test_facility", map[string]interface{}{"foo": "bar"})
+	hook := NewGraylogHook(r.Addr(), map[string]interface{}{"foo": "bar"})
 	msgData := "test message\nsecond line"
 
 	log := logrus.New()
+	log.Out = ioutil.Discard
 	log.Hooks.Add(hook)
 
 	log.Error(msgData)
@@ -111,13 +111,14 @@ func testErrorLevelReporting(t *testing.T) {
 }
 
 func TestJSONErrorMarshalling(t *testing.T) {
-	r, err := gelf.NewReader("127.0.0.1:0")
+	r, err := NewReader("127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("NewReader: %s", err)
 	}
-	hook := NewGraylogHook(r.Addr(), "test_facility", map[string]interface{}{})
+	hook := NewGraylogHook(r.Addr(), map[string]interface{}{})
 
 	log := logrus.New()
+	log.Out = ioutil.Discard
 	log.Hooks.Add(hook)
 
 	log.WithError(errors.New("sample error")).Info("Testing sample error")
@@ -139,14 +140,15 @@ func TestJSONErrorMarshalling(t *testing.T) {
 }
 
 func TestParallelLogging(t *testing.T) {
-	r, err := gelf.NewReader("127.0.0.1:0")
+	r, err := NewReader("127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("NewReader: %s", err)
 	}
-	hook := NewGraylogHook(r.Addr(), "test_facility", nil)
-	asyncHook := NewAsyncGraylogHook(r.Addr(), "test_facility", nil)
+	hook := NewGraylogHook(r.Addr(), nil)
+	asyncHook := NewAsyncGraylogHook(r.Addr(), nil)
 
 	log := logrus.New()
+	log.Out = ioutil.Discard
 	log.Hooks.Add(hook)
 	log.Hooks.Add(asyncHook)
 
@@ -195,5 +197,25 @@ func TestParallelLogging(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	if panicked {
 		t.Fatalf("Logging in parallel caused a panic")
+	}
+}
+
+func TestSetWriter(t *testing.T) {
+	r, err := NewReader("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("NewReader: %s", err)
+	}
+	hook := NewGraylogHook(r.Addr(), nil)
+
+	w := hook.Writer()
+	w.CompressionLevel = flate.BestCompression
+	hook.SetWriter(w)
+
+	if hook.Writer().CompressionLevel != flate.BestCompression {
+		t.Error("Writer was not set correctly")
+	}
+
+	if hook.SetWriter(nil) == nil {
+		t.Error("Setting a nil writter should raise an error")
 	}
 }
