@@ -1,4 +1,4 @@
-package graylog // import "gopkg.in/gemnasium/logrus-graylog-hook.v1"
+package graylog
 
 import (
 	"bytes"
@@ -207,16 +207,16 @@ func (hook *GraylogHook) sendEntry(entry graylogEntry) {
 	extra["_severity"] = fmt.Sprintf("%s", entry.Level)
 
 	m := gelf.Message{
-		Version:    "1.1",
-		Host:       host,
-		Short:      string(short),
-		Full:       string(full),
-		TimeUnixMs: time.Now().UnixNano() / 1000000,
-		Level:      level,
-		Facility:   hook.Facility,
-		File:       entry.file,
-		Line:       entry.line,
-		Extra:      extra,
+		Version:  "1.1",
+		Host:     host,
+		Short:    string(short),
+		Full:     string(full),
+		TimeUnix: float64(time.Now().UnixNano()/1000000) / 1000.,
+		Level:    level,
+		Facility: hook.Facility,
+		File:     entry.file,
+		Line:     entry.line,
+		Extra:    extra,
 	}
 
 	if err := w.WriteMessage(&m); err != nil {
